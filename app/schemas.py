@@ -1,12 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
 class TaskBase(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title:str = Field(...,min_length=1,max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
     is_done: bool = False
-    priority: int = 1
+    priority: int = Field(1, ge=1, le=2000)
+    # title: str
+    # description: Optional[str] = None
+    # is_done: bool = False
+    # priority: int = 1
 
 class TaskCreate(TaskBase):
     pass     
