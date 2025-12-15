@@ -11,7 +11,6 @@ class TaskBase(BaseModel):
     # description: Optional[str] = None
     # is_done: bool = False
     # priority: int = 1
-
 class TaskCreate(TaskBase):
     pass     
 class TaskUpdate(BaseModel):
@@ -31,4 +30,27 @@ class Taskstats(BaseModel):
     undone: int
     high_priority: int
 
+class UserBase(BaseModel):
+    username:str = Field(...,min_length=3,max_length=10)
+    email: Optional[str] = Field(None, max_length=50)
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=6, max_length=20)
+class User(UserBase):
+    id: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+#新增 登录请求体
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+#新增 登陆成功后返回的token
+class Token(BaseModel):
+    access_token:str
+    token_type:str = "bearer"
+#新增 解析token里的数据时用
+class TokenDaTa(BaseModel):
+    user_id: Optional[str] = None
     
