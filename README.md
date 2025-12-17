@@ -60,3 +60,53 @@
 - `PUT /tasks/{task_id}`：更新任务
 - `DELETE /tasks/{task_id}`：删除任务
 - `GET /tasks/stats`：获取当前用户的任务统计数据
+
+
+### 注册用户
+curl -X POST http://127.0.0.1:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "demo",
+    "email": "demo@example.com",
+    "password": "demo123"
+  }'
+
+### 登录获得token
+curl -X POST http://127.0.0.1:8000/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=demo&password=demo123"
+### 返回
+{
+  "access_token": "xxxx.yyyy.zzzz",
+  "token_type": "bearer"
+}
+
+
+### 携带token调用受保护的任务接口
+curl -X POST http://127.0.0.1:8000/tasks \
+  -H "Authorization: Bearer xxxx.yyyy.zzzz" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "first task",
+    "description": "created by demo",
+    "is_done": false,
+    "priority": 3
+  }'
+
+### SwaggerUI 中如何使用token
+打开 http://127.0.0.1:8000/docs
+
+点右上角 Authorize
+
+在输入框里填：Bearer 空格 + 你的 access_token
+
+例如：Bearer eyJhbGciOiJIUzI1NiIs...
+
+点 Authorize → Close
+然后再去调 /tasks 相关接口，就是以该用户身份访问。
+
+### 数据库迁移（Alembic）
+
+生成迁移：
+```bash
+alembic revision --autogenerate -m "描述本次改动"

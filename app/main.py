@@ -1,3 +1,4 @@
+from app.config import settings
 from fastapi import FastAPI, Depends, HTTPException,status
 #import fastapi_cdn_host
 
@@ -15,16 +16,97 @@ from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security import OAuth2PasswordRequestForm
 
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.requests import Request
+from starlette import status  # 如果你还没导入 status，这里一起补
 
-models.Base.metadata.create_all(bind=engine)
+
+
+
+import logging
+logger = logging.getLogger(__name__)
+
+#models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title='fastapi todo demo with db')
+
+
+# 1) 请求参数校验错误（Pydantic 层面）
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    validation_exception_handler:
+    处理 body / query / path 参数校验失败的情况。
+    """
+    logger.warning(
+        "Validation error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc.errors(),
+    )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.errors(),  # 具体错误列表
+            "error_code": "validation_error",
+        },
+    )
+
+# 2) 业务层显式抛出的 HTTPException（比如 400 / 401 / 404）
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    http_exception_handler:
+    处理我们代码里 raise HTTPException(...) 的情况。
+    """
+    logger.warning(
+        "HTTP error %s on %s %s: %s",
+        exc.status_code,
+        request.method,
+        request.url.path,
+        exc.detail,
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "error_code": "http_error",
+        },
+    )
+
+# 3) 其它所有未处理异常（兜底）
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    global_exception_handler:
+    所有没单独处理的异常都会走这里。
+    """
+    logger.error(
+        "Unhandled error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+        exc_info=True,  # 打出堆栈
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "Internal server error",
+            "error_code": "internal_error",
+        },
+    )
+
+
+# 创建一个名叫 "app" 的 logger
+# 名字叫 app_logger / logger，意思就是“给这个应用专用的日志记录器”
+logger = logging.getLogger("app")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 #fastapi_cdn_host.patch_docs(app)  #解决静态文件加载问题
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-#JWT配置
-SECRET_KEY = "change_this_to_a_random_long_string"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60*24
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def get_db():
@@ -41,9 +123,9 @@ def create_access_token(data:dict,expires_delta:timedelta | None = None) -> str:
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp":expire}) #添加过期时间
-    encoded_jwt = jwt.encode(to_encode,SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode,settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 #get_current_user 依赖
@@ -57,7 +139,7 @@ def get_current_user(
         headers={"www-authenticate":"Bearer"},
     )
     try:
-        payload = jwt.decode(token,SECRET_KEY,algorithms=[ALGORITHM])
+        payload = jwt.decode(token,settings.SECRET_KEY,algorithms=[settings.ALGORITHM])
         user_id:str | None =payload.get("sub")
         if user_id is None:
             raise credentials_excpetion
@@ -75,8 +157,6 @@ def read_me(
     current_user:models.UserModel = Depends(get_current_user),
 ):
     return current_user
-
-
 
 
 def get_password_hash(password:str)->str:
@@ -156,6 +236,8 @@ def create_task(
 
 @app.post("/auth/register",response_model=schemas.User)
 def register(user_in:schemas.UserCreate, db:Session = Depends(get_db)):
+    
+    logger.info("Register attempt: username=%s email=%s", user_in.username, user_in.email)
     # 1.检查用户是否已经存在
     existing = db.query(models.UserModel).filter(
         models.UserModel.username == user_in.username
@@ -175,6 +257,8 @@ def register(user_in:schemas.UserCreate, db:Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    logger.info("Register success: user_id=%s username=%s", user.id, user.username)
     return user
 
 @app.post("/auth/login",response_model=schemas.Token)#schemas.User改为schemas.Token
@@ -207,13 +291,12 @@ def login(
     # if not verify_password(data.password, user.hashed_password):
     #     raise HTTPException(status_code=400,detail="Incorrect username or password")
     # #修改问返回token而不是user
-    # access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     # access_token = create_access_token(
     #     data={"sub":user.id},
     #     expires_delta=access_token_expires,
     
     return {"access_token":access_token,"token_type":"bearer"}
-
 
 @app.get("/tasks/stats", response_model=schemas.Taskstats)
 def get_task_stats(db: Session = Depends(get_db)):

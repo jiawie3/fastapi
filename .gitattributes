@@ -1,0 +1,7 @@
+# 所有文本文件都按 LF 处理
+* text=auto eol=lf
+
+# （可选）再明确指定几类文件一定用 LF
+*.py   text eol=lf
+*.ini  text eol=lf
+*.mako text eol=lf

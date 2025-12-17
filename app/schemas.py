@@ -31,7 +31,7 @@ class Taskstats(BaseModel):
     high_priority: int
 
 class UserBase(BaseModel):
-    username:str = Field(...,min_length=3,max_length=10)
+    username:str = Field(...,min_length=3,max_length=20)
     email: Optional[str] = Field(None, max_length=50)
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=20)
@@ -53,4 +53,3 @@ class Token(BaseModel):
 #新增 解析token里的数据时用
 class TokenDaTa(BaseModel):
     user_id: Optional[str] = None
-    
